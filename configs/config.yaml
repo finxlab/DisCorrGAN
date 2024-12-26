@@ -1,40 +1,39 @@
+# Data-related settings
+data_dir: 'data/'
+n_vars: 6
+n_steps: 128
 
+# Training settings
 device: cuda
 seed: 0
-gpu_id : "1"
-train: True
-n_lags: 24
-
-data_dir: 'data/'
-
-algo: TailGAN
-generator: Tail
-discriminator: Tail
-#scale parameter for W
-W: 10.0
-#quantiles
-alphas: [0.05]
-#score function
-score: 'quant'
-#Project into constraint set
-project: True
-#multiplier of temperature
-temp: 1 # 0.01
-#dimensionality of the latent space
-latent_dim: 256 # 1000
-#number of rows and columns
-n_rows: 24
-n_cols: 3
-#hyperparameters:
-lr_G: 0.002
-lr_D: 0.003
-D_steps_per_G_step: 3
 batch_size: 256
-steps: 5 # Turn to 10**5 for better performance
-#generator hyperparameter:
+n_epochs: 200
+
+# Algorithm-related settings
+algo: GAN
+generator: TCN
+discriminator: TCN
+
+# Model settings
 G_input_dim: 3 # Noise dimension
-G_hidden_dim: 64
-G_num_layers: 2
-#discriminator hyperparameter:
-D_hidden_dim: 32
-D_num_layers: 3
+D_input_dim: 1 # Noise dimension
+hidden_dim: 64
+output_dim: 1
+noise_dim: 3
+
+# Learning rates
+lr_G: 0.0002
+lr_D: 0.0001
+D_steps_per_G_step: 1
+corr_loss_type: 'l1'       # 'l2' or 'l1' or 'fro'
+corr_weight: 5
+
+# Additional settings
+gp: True
+W: 10.0                   # scale parameter for W
+alphas: [0.05]            # quantiles
+score: 'quant'            # score function
+project: True             # Project into constraint set
+temp: 1 # 0.01            # multiplier of temperature
+latent_dim: 256 # 1000    # dimensionality of the latent space
+
