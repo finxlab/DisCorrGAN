@@ -21,7 +21,7 @@ class GANTrainer:
         # Directory settings
         self.full_name = (
             f'{config.n_epochs}_{config.batch_size}_Glr_{config.lr_G}_Dlr_{config.lr_D}_hidden_dim_{config.hidden_dim}'
-            f'_corr_loss_{config.corr_loss_type}_corr_weight_{config.corr_weight}_n_critic_{config.D_steps_per_G_step}'
+            f'_corr_loss_{config.corr_loss_type}_corr_weight_{config.corr_weight}_n_critic_{config.D_steps_per_G_step}_gp_{config.lambda_gp}_PReLU_16_split'
         )
         self.results_dir = f'./results/models/{self.full_name}/'        
         os.makedirs(self.results_dir, exist_ok=True)                    
@@ -29,22 +29,6 @@ class GANTrainer:
         # Initialize optimizers and loss function - RMSprop for WGAN
         self.G_optimizer = [torch.optim.RMSprop(G.generators[i].parameters(), lr=config.lr_G) for i in range(config.n_vars)]
         self.D_optimizer = [torch.optim.RMSprop(D.discriminators[i].parameters(), lr=config.lr_D) for i in range(config.n_vars)]                    
-        
-        # Adam 옵티마이저 사용
-        # self.G_optimizer = [torch.optim.Adam(
-        #         G.generators[i].parameters(), 
-        #         lr=config.lr_G, 
-        #         betas=(0.0, 0.9)  # WGAN에서는 보통 beta1=0.0, beta2=0.9를 사용
-        #     ) for i in range(config.n_vars)
-        # ]
-
-        # self.D_optimizer = [
-        #     torch.optim.Adam(
-        #         D.discriminators[i].parameters(), 
-        #         lr=config.lr_D, 
-        #         betas=(0.0, 0.9)  # 동일하게 beta 설정
-        #     ) for i in range(config.n_vars)
-        # ]
         
         # Learning rate schedulers
         self.G_scheduler = [lr_scheduler.StepLR(self.G_optimizer[i], step_size=10, gamma=0.9) for i in range(config.n_vars)]
@@ -84,7 +68,7 @@ class GANTrainer:
 
             if self.config.gp:  # Gradient Penalty
                 gradient_penalty = compute_gradient_penalty(self.D, real[:, i:i+1, :], fake[:, i:i+1, :], i)                    
-                loss_D = loss_D + 10 * gradient_penalty                                
+                loss_D = loss_D + config.lambda_gp * gradient_penalty                                
 
             loss_D.backward(retain_graph=True)
             self.D_optimizer[i].step()

@@ -34,6 +34,37 @@ def loader_to_tensor(dl):
     return torch.cat(tensor)
 
 
+def save_obj(obj: object, filepath: str):
+    """ Generic function to save an object with different methods. """
+    if filepath.endswith('pkl'):
+        saver = pickle.dump
+    elif filepath.endswith('pt'):
+        saver = torch.save
+    else:
+        raise NotImplementedError()
+    with open(filepath, 'wb') as f:
+        saver(obj, f)
+    return 0
+
+def get_time_vector(size: int, length: int) -> torch.Tensor:
+    return torch.linspace(1/length, 1, length).reshape(1, -1, 1).repeat(size, 1, 1)
+
+
+def AddTime(x):
+    """
+    Time augmentation for paths
+    Parameters
+    ----------
+    x: torch.tensor, [B, L, D]
+
+    Returns
+    -------
+    Time-augmented paths, torch.tensor, [B, L, D+1]
+    """
+    t = get_time_vector(x.shape[0], x.shape[1]).to(x.device)
+    return torch.cat([t, x], dim=-1)
+
+
 def load_config(file_dir: str):
     with open(file_dir) as file:
         config = ml_collections.ConfigDict(yaml.safe_load(file))
