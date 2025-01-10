@@ -13,35 +13,9 @@ class UserGenerator(nn.Module):
         outputs = torch.cat([self.generators[i](noise) for i in range(self.n_vars)], dim=1)                 
         return outputs
 
-# class TCNGenerator(nn.Module):
-#     def __init__(self, G_input_dim, hidden_dim):
-#         super(TCNGenerator, self).__init__()
-#         self.tcn = nn.ModuleList([TemporalBlock(G_input_dim, hidden_dim, kernel_size=1, stride=1, dilation=1, padding=0),
-#                                  *[TemporalBlock(hidden_dim, hidden_dim, kernel_size=2, stride=1, dilation=i, padding=i) for i in [1, 2, 4, 8, 16]]])
-#         # Transformer Self-Attention
-#         self.self_attention = nn.MultiheadAttention(
-#             embed_dim=hidden_dim,  # Embedding dimension (matches TCN output channel size)
-#             num_heads=4,   # Number of attention heads
-#             dropout=0.1,
-#             batch_first=True
-#         )
-#         self.bn = nn.BatchNorm1d(hidden_dim)
-#         self.last = nn.Sequential(nn.Conv1d(hidden_dim, 1, kernel_size=1, stride=1))
-        
-#     def forward(self, z):          
-#         for layer in self.tcn:
-#             z = layer(z)
-            
-#         z = z.permute(0, 2, 1)
-#         z, _ = self.self_attention(z, z, z)  # Query, Key, Value are all z
-#         z = z.permute(0, 2, 1)
-#         z = self.bn(z)
-        
-#         x = self.last(z)
-#         return x
     
 class TCNGenerator(nn.Module):
-    def __init__(self, G_input_dim, hidden_dim, step_size=16):
+    def __init__(self, G_input_dim, hidden_dim, step_size=16, droptout=0.1):
         super(TCNGenerator, self).__init__()
         self.step_size = step_size
 
@@ -51,13 +25,13 @@ class TCNGenerator(nn.Module):
         self.self_attention = nn.MultiheadAttention(
             embed_dim=hidden_dim,  # Embedding dimension (matches TCN output channel size)
             num_heads=4,   # Number of attention heads
-            dropout=0.1,
+            dropout=droptout,
             batch_first=True
         )
         self.bn = nn.BatchNorm1d(hidden_dim)
         self.last = nn.Sequential(nn.Conv1d(hidden_dim, 1, kernel_size=1, stride=1))        
         self.gelu = nn.GELU()  # GELU 활성화 함수로 정의        
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(droptout)
 
     def forward(self, z):
         # TCN 입력: z.shape == (B, N, T)
@@ -90,3 +64,33 @@ class TCNGenerator(nn.Module):
         # Pass through final layers
         x = self.last(z)  # [B, 1, T]
         return x
+
+
+
+
+# class TCNGenerator(nn.Module):
+#     def __init__(self, G_input_dim, hidden_dim):
+#         super(TCNGenerator, self).__init__()
+#         self.tcn = nn.ModuleList([TemporalBlock(G_input_dim, hidden_dim, kernel_size=1, stride=1, dilation=1, padding=0),
+#                                  *[TemporalBlock(hidden_dim, hidden_dim, kernel_size=2, stride=1, dilation=i, padding=i) for i in [1, 2, 4, 8, 16]]])
+#         # Transformer Self-Attention
+#         self.self_attention = nn.MultiheadAttention(
+#             embed_dim=hidden_dim,  # Embedding dimension (matches TCN output channel size)
+#             num_heads=4,   # Number of attention heads
+#             dropout=0.1,
+#             batch_first=True
+#         )
+#         self.bn = nn.BatchNorm1d(hidden_dim)
+#         self.last = nn.Sequential(nn.Conv1d(hidden_dim, 1, kernel_size=1, stride=1))
+        
+#     def forward(self, z):          
+#         for layer in self.tcn:
+#             z = layer(z)
+            
+#         z = z.permute(0, 2, 1)
+#         z, _ = self.self_attention(z, z, z)  # Query, Key, Value are all z
+#         z = z.permute(0, 2, 1)
+#         z = self.bn(z)
+        
+#         x = self.last(z)
+#         return x

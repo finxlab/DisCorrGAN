@@ -21,18 +21,20 @@ class GANTrainer:
         # Directory settings
         self.full_name = (
             f'{config.n_epochs}_{config.batch_size}_Glr_{config.lr_G}_Dlr_{config.lr_D}_hidden_dim_{config.hidden_dim}'
-            f'_corr_loss_{config.corr_loss_type}_corr_weight_{config.corr_weight}_n_critic_{config.D_steps_per_G_step}_gp_{config.lambda_gp}_PReLU_16_split'
+            f'_corr_loss_{config.corr_loss_type}_corr_weight_{config.corr_weight}_n_critic_{config.D_steps_per_G_step}_gp_{config.lambda_gp}_PReLU_16_Adam_drop_0.1_noise_{config.noise_dim}'
         )
         self.results_dir = f'./results/models/{self.full_name}/'        
         os.makedirs(self.results_dir, exist_ok=True)                    
 
         # Initialize optimizers and loss function - RMSprop for WGAN
-        self.G_optimizer = [torch.optim.RMSprop(G.generators[i].parameters(), lr=config.lr_G) for i in range(config.n_vars)]
-        self.D_optimizer = [torch.optim.RMSprop(D.discriminators[i].parameters(), lr=config.lr_D) for i in range(config.n_vars)]                    
-        
+        # self.G_optimizer = [torch.optim.RMSprop(G.generators[i].parameters(), lr=config.lr_G) for i in range(config.n_vars)]
+        # self.D_optimizer = [torch.optim.RMSprop(D.discriminators[i].parameters(), lr=config.lr_D) for i in range(config.n_vars)]                    
+        self.G_optimizer = [torch.optim.Adam(G.generators[i].parameters(), lr=config.lr_G, betas=(0.5, 0.9)) for i in range(config.n_vars)]
+        self.D_optimizer = [torch.optim.Adam(D.discriminators[i].parameters(), lr=config.lr_D, betas=(0.5, 0.9)) for i in range(config.n_vars)]
+
         # Learning rate schedulers
-        self.G_scheduler = [lr_scheduler.StepLR(self.G_optimizer[i], step_size=10, gamma=0.9) for i in range(config.n_vars)]
-        self.D_scheduler = [lr_scheduler.StepLR(self.D_optimizer[i], step_size=10, gamma=0.9) for i in range(config.n_vars)]            
+        self.G_scheduler = [lr_scheduler.StepLR(self.G_optimizer[i], step_size=10, gamma=0.99) for i in range(config.n_vars)]
+        self.D_scheduler = [lr_scheduler.StepLR(self.D_optimizer[i], step_size=10, gamma=0.99) for i in range(config.n_vars)]            
     
     def fit(self):        
         self.G.to(self.device)
@@ -95,7 +97,7 @@ class GANTrainer:
                 # Log generator and cross-correlation loss for this variable
                 wandb.log({f"Generator Loss (Var {i})": gen_loss.item()})
                 if i == 0:
-                    print(fake_corr.round(decimals=2))
+                    #print(fake_corr.round(decimals=2))
                     print('cross_corr_loss:', corr_loss.item())    
                     wandb.log({f"Cross-Correlation Loss (Var {i})": corr_loss.item()})                
                 

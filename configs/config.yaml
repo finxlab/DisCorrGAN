@@ -7,7 +7,7 @@ n_steps: 128
 device: cuda
 seed: 0
 batch_size: 256
-n_epochs: 200
+n_epochs: 300
 
 # Algorithm-related settings
 algo: GAN
@@ -15,11 +15,11 @@ generator: TCN
 discriminator: TCN
 
 # Model settings
-G_input_dim: 3 # Noise dimension
+G_input_dim: 1 # Noise dimension
 D_input_dim: 1 # Noise dimension
-hidden_dim: 80
+hidden_dim: 64
 output_dim: 1
-noise_dim: 3
+noise_dim: 1
 
 # Learning rates
 lr_G: 0.0002
