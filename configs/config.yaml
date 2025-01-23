@@ -15,18 +15,18 @@ generator: TCN
 discriminator: TCN
 
 # Model settings
-G_input_dim: 1 # Noise dimension
+G_input_dim: 2 # Noise dimension
 D_input_dim: 1 # Noise dimension
-hidden_dim: 64
+hidden_dim: 80
 output_dim: 1
-noise_dim: 1
+noise_dim: 2
 
 # Learning rates
 lr_G: 0.0002
 lr_D: 0.0001
 D_steps_per_G_step: 1
 corr_loss_type: 'l1'       # 'l2' or 'l1' or 'fro'
-corr_weight: 5
+corr_weight: 1.0
 lambda_gp: 10.0
 
 # Additional settings
