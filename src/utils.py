@@ -1,5 +1,5 @@
 from torch.nn.functional import one_hot
-import torch
+import torch, math
 import torch.nn as nn
 import numpy as np
 import pickle
@@ -160,3 +160,42 @@ def correlation_loss(fake: torch.Tensor, real: torch.Tensor, corr_loss_type: str
     return loss, fake_corr
 
 
+
+class PositionalEncoding(nn.Module):
+    """
+    (batch_first=True) 형태를 가정합니다.
+    입력: (B, seq_len, d_model)
+    출력: (B, seq_len, d_model)
+    """
+    def __init__(self, d_model: int, max_len: int = 100):
+        super(PositionalEncoding, self).__init__()
+        # [max_len, d_model] 크기의 행렬에 sin/cos 값을 미리 계산해 저장
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)  # shape: (max_len, 1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)  # 짝수 인덱스: sin
+        pe[:, 1::2] = torch.cos(position * div_term)  # 홀수 인덱스: cos
+
+        # 학습되지 않는 버퍼로 등록 (forward 시 그대로 사용됨)
+        pe = pe.unsqueeze(0)  # shape: (1, max_len, d_model)
+        self.register_buffer('pe', pe)
+
+        self.d_model = d_model
+        self.max_len = max_len
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x.shape: (B, seq_len, d_model)
+        seq_len 구간만큼 Positional Encoding을 slice하여 x에 더해준다.
+        """
+        bsz, seq_len, _ = x.shape
+        if seq_len > self.max_len:
+            raise ValueError(f"입력 길이({seq_len})가 최대 길이({self.max_len})보다 깁니다.")
+        
+        # PE를 seq_len만큼 잘라서 (1, seq_len, d_model) 형태로
+        pe_slice = self.pe[:, :seq_len, :]  
+        x = x + pe_slice  # broadcast되어 (B, seq_len, d_model)에 더해짐
+        return x
+    

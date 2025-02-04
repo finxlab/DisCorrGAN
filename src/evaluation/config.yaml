@@ -8,8 +8,6 @@ Evaluation:
   metrics_enabled: [
     'var',
     'es',
-    'max_drawback',
-    'cumulative_pnl'
   ]
 
   TestMetrics:

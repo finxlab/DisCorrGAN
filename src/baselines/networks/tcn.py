@@ -18,7 +18,7 @@ class Chomp1d(nn.Module):
         return x[:, :, :-self.chomp_size].contiguous()
     
 class TemporalBlock(nn.Module):
-    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, spec_norm=False, dropout=0.1):
+    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.1, spec_norm=False):
         super(TemporalBlock, self).__init__()
 
         # First convolutional block
@@ -44,7 +44,6 @@ class TemporalBlock(nn.Module):
                 nn.Conv1d(n_inputs, n_outputs, kernel_size=1),                
                 nn.BatchNorm1d(n_outputs)
             )                                
-        self.relu = nn.PReLU()
         self.init_weights()
 
     def init_weights(self):
@@ -73,4 +72,5 @@ class TemporalBlock(nn.Module):
 
         # Residual connection        
         res = x if self.downsample is None else self.downsample(x)
-        return self.relu(out + res)        
+        return out + res      
+        
