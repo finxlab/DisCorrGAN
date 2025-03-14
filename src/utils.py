@@ -72,23 +72,66 @@ def load_config(file_dir: str):
         
 
 """ Compute the gradient penalty for WGAN-GP for conditional GANs with time series data """
-def compute_gradient_penalty(discriminator, real_samples, fake_samples, i):
-    alpha = torch.rand(real_samples.size(0), 1, 1, device=real_samples.device).expand_as(real_samples)
-    interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
+# def compute_gradient_penalty(discriminator, real_samples, fake_samples, i):
+#     alpha = torch.rand(real_samples.size(0), 1, 1, device=real_samples.device).expand_as(real_samples)
+#     interpolates = (alpha * real_samples + ((1 - alpha) * fake_samples)).requires_grad_(True)
     
-    critic_interpolates = discriminator(interpolates, i)
+#     critic_interpolates = discriminator(interpolates, i)
         
+#     gradients = torch.autograd.grad(
+#         outputs=critic_interpolates,
+#         inputs=interpolates,
+#         grad_outputs=torch.ones_like(critic_interpolates),
+#         create_graph=True,
+#         retain_graph=True,
+#         only_inputs=True
+#     )[0]
+    
+#     gradients_norm = gradients.norm(2, dim=(1, 2))
+#     gradient_penalty = ((gradients_norm - 1) ** 2).mean()
+#     return gradient_penalty
+def compute_gradient_penalty(discriminator, real_samples, fake_samples, i):
+    """
+    Gradient Penalty를 올바르게 계산하는 함수 (WGAN-GP 방식).
+    
+    Parameters:
+        - discriminator: Discriminator 네트워크
+        - real_samples: 실제 데이터 (B, 1, T)
+        - fake_samples: 생성된 데이터 (B, 1, T)
+        - i: Discriminator에 전달될 추가 정보
+    
+    Returns:
+        - gradient_penalty: Gradient Penalty 스칼라 값 (Tensor)
+    """
+    
+    B, C, T = real_samples.shape  # (B, 1, T)
+    
+    # (1) Alpha 생성 (모든 시점(T)에 대해 동일한 interpolation 적용)
+    alpha = torch.rand(B, 1, 1, device=real_samples.device)  # (B, 1, 1)
+    
+    # (2) Interpolation 계산
+    interpolates = (alpha * real_samples + (1 - alpha) * fake_samples).requires_grad_(True)  # (B, 1, T)
+
+    # (3) Discriminator 평가
+    critic_interpolates = discriminator(interpolates, i)  # Shape: (B, 1) 또는 (B, 1, T)
+
+    # (4) Gradient 계산
+    grad_outputs = torch.ones_like(critic_interpolates, requires_grad=False)  # Shape 일치 필수
     gradients = torch.autograd.grad(
         outputs=critic_interpolates,
         inputs=interpolates,
-        grad_outputs=torch.ones_like(critic_interpolates),
+        grad_outputs=grad_outputs,
         create_graph=True,
         retain_graph=True,
         only_inputs=True
-    )[0]
-    
-    gradients_norm = gradients.norm(2, dim=(1, 2))
-    gradient_penalty = ((gradients_norm - 1) ** 2).mean()
+    )[0]  # Shape: (B, 1, T)
+
+    # (5) Gradient Norm 계산 (Batch-wise)
+    gradients_norm = gradients.view(B, -1).norm(2, dim=1)  # (B,)
+
+    # (6) Gradient Penalty 계산
+    gradient_penalty = ((gradients_norm - 1) ** 2).mean()  # 스칼라 값
+
     return gradient_penalty
 
 """ Scale the log returns using Gaussianize and StandardScaler """
@@ -141,6 +184,30 @@ def inverse_scaling(y, scalers):
 
         # Assign back the feature's inverse transformed data
         y_original[:, idx, :] = y_feature
+
+    return y_original
+
+def inverse_scaling_split(y, scalers, idx):
+    y = y.cpu().detach().numpy()  # Convert to NumPy for compatibility with scalers    
+    y_original = np.zeros_like(y)  # Placeholder for original data
+        
+    standardScaler1, standardScaler2, gaussianize = scalers[idx]
+    
+    y_feature = y[:, 0, :]  # Shape: (batch_size, seq_len)
+
+    # Normalize by batch mean and std for the current feature
+    EPS = 1e-8
+    y_feature = (y_feature - y_feature.mean(axis=0, keepdims=True)) / (y_feature.std(axis=0, keepdims=True) + EPS)
+
+    # Perform inverse scaling step-by-step
+    y_feature = standardScaler2.inverse_transform(y_feature)
+    y_feature = np.array([
+        gaussianize.inverse_transform(np.expand_dims(sample, 1)) for sample in y_feature
+    ]).squeeze()
+    y_feature = standardScaler1.inverse_transform(y_feature)
+
+    # Assign back the feature's inverse transformed data
+    y_original[:, 0, :] = y_feature
 
     return y_original
 

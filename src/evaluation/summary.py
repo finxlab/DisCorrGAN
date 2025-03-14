@@ -1,15 +1,16 @@
 from src.evaluation.loss import *
-from src.evaluation.scores import get_discriminative_score, get_predictive_score
 from src.evaluation.strategies import *
 import pandas as pd
 from src.utils import *
 from tqdm import tqdm
 
 
-STRATEGIES ={'equal_weight': EqualWeightPortfolioStrategy,
+STRATEGIES ={
+             'equal_weight': EqualWeightPortfolioStrategy,             
              'mean_reversion': MeanReversionStrategy,
              'trend_following': TrendFollowingStrategy,
-             'vol_trading': VolatilityTradingStrategy}
+             'vol_trading': VolatilityTradingStrategy
+             }
 
 def full_evaluation(fake_dataset, real_dataset, config, **kwargs):
     ec = EvaluationComponent(config, fake_dataset, real_dataset, **kwargs)
@@ -45,12 +46,7 @@ class EvaluationComponent(object):
 
         strat_name = kwargs.get('strat_name', 'equal_weight')
         self.strat = STRATEGIES[strat_name]()
-        self.metrics_group = {
-            'stylized_fact_scores': ['hist_loss', 'cross_corr', 'cov_loss', 'acf_loss', 'std_loss'],
-            'implicit_scores': ['discriminative_score', 'predictive_score', 'predictive_FID'],
-            'sig_scores': ['sigw1', 'sig_mmd'],
-            'permutation_test': ['permutation_test'],
-            'distance_based_metrics': ['onnd', 'innd', 'icd'],
+        self.metrics_group = {            
             'tail_scores': ['var', 'es'],
             'trading_strat_scores': ['max_drawback', 'cumulative_pnl']
         }
@@ -76,158 +72,57 @@ class EvaluationComponent(object):
         return data
 
     def eval_summary(self):
-
         metrics = self.config.Evaluation.metrics_enabled
-        # init
-        scores = {metric: [] for metric in metrics}
+        
+        scores = {metric: {'abs': [], 'rel': []} for metric in metrics}
         summary = {}
 
         for grp in self.metrics_group.keys():
-
             metrics_in_group = [m for m in metrics if m in self.metrics_group[grp]]
-
-            if len(metrics_in_group):
-
-                for metric in metrics_in_group:
-                    # print(f'---- evaluation metric = {metric} in group = {grp} ----')
-
-                    # create eval function by metric name
-                    eval_func = getattr(self, metric)
-
-                    if grp == 'permutation_test':
-                        power, type1_error = eval_func()
-                        summary['permutation_test_power'] = power
-                        summary['permutation_test_type1_error'] = type1_error
-
-                    else:
-                        for i in range(self.n_eval):
-                            real = self.data_set[i]['real']
-                            fake = self.data_set[i]['fake']
-
-                            if grp in ['stylized_fact_scores', 'sig_scores', 'distance_based_metrics', 'tail_scores',
-                                       'trading_strat_scores']:
-
-                                pnl_real = self.strat.get_pnl_trajectory(real)
-                                pnl_fake = self.strat.get_pnl_trajectory(fake)
-                                score = eval_func(pnl_real, pnl_fake)
-
-                            else:
-                                raise NotImplementedError(
-                                    f"metric {metric} not specified in any group {self.metrics_group.keys()}")
-
-                            # print(metric, score)
-                            # update scores
-                            ss = scores[metric]
-                            ss.append(score)
-                            scores.update({metric: ss})
-
-                        m_mean, m_std = np.array(scores[metric]).mean(), np.array(scores[metric]).std()
-                        summary[f'{metric}_mean'] = m_mean
-                        summary[f'{metric}_std'] = m_std
-            else:
-                # print(f' No metrics enabled in group = {grp}')
+            if len(metrics_in_group) == 0:
                 continue
 
+            for metric in metrics_in_group:
+                eval_func = getattr(self, metric)
+                
+                # 임시 리스트 (각 metric별로 abs/rel 스코어를 저장)
+                tmp_abs = []
+                tmp_rel = []
+
+                for i in range(self.n_eval):
+                    real = self.data_set[i]['real']
+                    fake = self.data_set[i]['fake']
+
+                    # 예: mean reversion 같은 전략의 PnL 등 구하기
+                    pnl_real = self.strat.get_pnl_trajectory(real)
+                    pnl_fake = self.strat.get_pnl_trajectory(fake)
+
+                    # (abs_loss_tensor, rel_loss_tensor) 형태로 반환된다고 가정
+                    abs_loss_tensor, rel_loss_tensor = eval_func(pnl_real, pnl_fake)
+                    # 텐서 -> 넘파이로 변환
+                    abs_loss_numpy = to_numpy(abs_loss_tensor)
+                    rel_loss_numpy = to_numpy(rel_loss_tensor)
+
+                    # 각 이터레이션마다 "평균값"만 사용하거나, 전체 값을 붙일 수도 있음
+                    tmp_abs.append(abs_loss_numpy.mean())
+                    tmp_rel.append(rel_loss_numpy.mean())
+
+                # 이제 tmp_abs, tmp_rel에 n_eval개 만큼의 평균값이 들어있으니,
+                # 이것들에 대해 최종 mean/std 계산
+                abs_mean = np.mean(tmp_abs)
+                abs_std = np.std(tmp_abs)
+                rel_mean = np.mean(tmp_rel)
+                rel_std = np.std(tmp_rel)
+
+                # summary에 기록
+                summary[f'{metric}_abs_mean'] = abs_mean
+                summary[f'{metric}_abs_std'] = abs_std
+                summary[f'{metric}_rel_mean'] = rel_mean
+                summary[f'{metric}_rel_std'] = rel_std
+
+        # DataFrame으로 만들어 출력하거나 return
         df = pd.DataFrame([summary])
-
         return summary
-
-    def discriminative_score(self, real_train_dl, real_test_dl, fake_train_dl, fake_test_dl):
-        ecfg = self.config.Evaluation.TestMetrics.discriminative_score
-        d_score_mean, _ = get_discriminative_score(
-            real_train_dl, real_test_dl, fake_train_dl, fake_test_dl,
-            self.config)
-        return d_score_mean
-
-    def predictive_score(self, real_train_dl, real_test_dl, fake_train_dl, fake_test_dl):
-        ecfg = self.config.Evaluation.TestMetrics.predictive_score
-        p_score_mean, _ = get_predictive_score(
-            real_train_dl, real_test_dl, fake_train_dl, fake_test_dl,
-            self.config)
-        return p_score_mean
-
-    # def sigw1(self, real, fake):
-    #     ecfg = self.config.Evaluation.TestMetrics.sigw1_loss
-    #     loss = to_numpy(SigW1Loss(x_real=real, depth=ecfg.depth, name='sigw1', normalise=ecfg.normalise)(fake))
-    #     return loss
-    #
-    # def sig_mmd(self, real, fake):
-    #     ecfg = self.config.Evaluation.TestMetrics.sig_mmd
-    #     if False:
-    #         metric = SigMMDMetric()
-    #         sig_mmd = metric.measure((real, fake), depth=ecfg.depth, seed=self.seed)
-    #     loss = to_numpy(SigMMDLoss(x_real=real, depth=ecfg.depth, seed=self.seed, name='sigmmd')(fake))
-    #     return loss
-
-    def cross_corr(self, real, fake):
-        cross_corr = to_numpy(CrossCorrelLoss(real, name='cross_corr')(fake))
-        return cross_corr
-
-    def hist_loss(self, real, fake):
-        ecfg = self.config.Evaluation.TestMetrics.hist_loss
-        if ecfg.keep_init:
-            loss = to_numpy(HistoLoss(real[:, 1:, :], n_bins=ecfg.n_bins, name='hist_loss')(fake[:, 1:, :]))
-        else:
-            loss = to_numpy(HistoLoss(real, n_bins=ecfg.n_bins, name='hist_loss')(fake))
-        return loss
-
-    def acf_loss(self, real, fake):
-        ecfg = self.config.Evaluation.TestMetrics.acf_loss
-        if ecfg.keep_init:
-            loss = to_numpy(ACFLoss(real, name='acf_loss', stationary=ecfg.stationary)(fake))
-        else:
-            loss = to_numpy(ACFLoss(real[:,1:], name='acf_loss', stationary=ecfg.stationary)(fake[:,1:]))
-        return loss
-
-    def cov_loss(self, real, fake):
-        loss = to_numpy(CovLoss(real, name='cov_loss')(fake))
-        return loss
-
-    # def permutation_test(self):
-    #     ecfg = self.config.Evaluation.TestMetrics.permutation_test
-    #     if 'recovery' in self.kwargs:
-    #         recovery = self.kwargs['recovery']
-    #         kwargs = {'recovery': recovery}
-    #     else:
-    #         kwargs = {}
-    #     fake_data = loader_to_tensor(
-    #         fake_loader(
-    #             self.generator,
-    #             num_samples=int(self.real_data.shape[0] // 2),
-    #             n_lags=self.config.n_lags,
-    #             batch_size=self.config.batch_size,
-    #             algo=self.algo,
-    #             **kwargs
-    #         )
-    #     )
-    #     power, type1_error = sig_mmd_permutation_test(self.real_data, fake_data, ecfg.n_permutation)
-    #     return power, type1_error
-
-    def onnd(self, real, fake):
-        # ecfg = self.config.Evaluation.TestMetrics.onnd
-        metric = ONNDMetric()
-        if real.shape[0]>8000:
-            real = real[:8000]
-            fake = fake[:8000]
-        loss = to_numpy(metric.measure((real, fake)))
-        return loss
-
-    def innd(self, real, fake):
-        # ecfg = self.config.Evaluation.TestMetrics.innd
-        metric = INNDMetric()
-        if real.shape[0]>8000:
-            real = real[:8000]
-            fake = fake[:8000]
-        loss = to_numpy(metric.measure((real, fake)))
-        return loss
-
-    def icd(self, real, fake):
-        # ecfg = self.config.Evaluation.TestMetrics.icd
-        metric = ICDMetric()
-        if fake.shape[0]>8000:
-            fake = fake[:8000]
-        loss = to_numpy(metric.measure(fake))
-        return loss
 
     def max_drawback(self, real, fake):
         loss = to_numpy(MaxDrawbackLoss(real, name='max_drawback_loss')(fake))
@@ -236,17 +131,16 @@ class EvaluationComponent(object):
     def cumulative_pnl(self, real, fake):
         loss = to_numpy(CumulativePnLLoss(real, name='cum_pnl_loss')(fake))
         return loss
-
+    
     def var(self, real, fake):
-        ecfg = self.config.Evaluation.TestMetrics.var
-        loss = to_numpy(VARLoss(real.unsqueeze(2), name='var_loss', alpha=ecfg.alpha)(fake.unsqueeze(2)))
-        return loss
-
+        ecfg = self.config.Evaluation.TestMetrics.var    
+        losses = VARLoss(real.unsqueeze(2), name='var_loss', alpha=ecfg.alpha)(fake.unsqueeze(2))        
+        abs_loss = losses['abs_loss']
+        rel_loss = losses['rel_loss']  
+        return (abs_loss, rel_loss)
     def es(self, real, fake):
-        ecfg = self.config.Evaluation.TestMetrics.es
-        loss = to_numpy(ESLoss(real.unsqueeze(2), name='es_loss', alpha=ecfg.alpha)(fake.unsqueeze(2)))
-        return loss
-    def std_loss(self, real, fake):
-        loss = to_numpy(StdLoss(real, name='std_loss')(fake))
-        return loss
-
+        ecfg = self.config.Evaluation.TestMetrics.es   
+        losses = ESLoss(real.unsqueeze(2), name='es_loss', alpha=ecfg.alpha)(fake.unsqueeze(2))        
+        abs_loss = losses['abs_loss']
+        rel_loss = losses['rel_loss']  
+        return (abs_loss, rel_loss)

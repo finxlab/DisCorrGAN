@@ -220,10 +220,44 @@ class EqualWeightPortfolioStrategy(TradingStrategy):
 
         pnl = self.compute_cumulative_pnl(price_series)
         return pnl
+    
+    
+    
+import numpy as np
 
+def count_position_transitions(signals: torch.Tensor):
+    """
+    Count the number of position transitions, i.e. when the effective signal (ignoring consecutive duplicates)
+    changes from 1 to -1 or from -1 to 1.
+    
+    Args:
+        signals: Tensor of shape [N, T, d] with values in {-1, 0, 1}.
+    
+    Returns:
+        total_transitions: The total number of transitions across all batches and assets.
+    """
+    # Convert to numpy for easier iteration
+    signals_np = signals.cpu().numpy()  # shape (N, T, d)
+    N, T, d = signals_np.shape
+    total_transitions = 0
+    for n in range(N):
+        for i in range(d):
+            series = signals_np[n, :, i]
+            # Remove consecutive duplicates to get the effective sequence.
+            effective = [series[0]]
+            for t in range(1, T):
+                if series[t] != effective[-1]:
+                    effective.append(series[t])
+            # Count transitions: only count when switching directly from 1 to -1 or -1 to 1.
+            for j in range(1, len(effective)):
+                prev = effective[j - 1]
+                curr = effective[j]
+                if prev != 0 and curr != 0 and prev != curr:
+                    total_transitions += 1
+    return total_transitions
 
 class MeanReversionStrategy(TradingStrategy):
-    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, window_size=12, threshold=0.01):
+    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, window_size=20, threshold=0.01):
         """
         :param window_size: The window size for calculating the rolling mean.
         :param threshold: The percentage threshold for generating buy/sell signals.
@@ -252,13 +286,56 @@ class MeanReversionStrategy(TradingStrategy):
                 sell_mask = current_price > (1 + self.threshold) * rolling_mean
                 signals[buy_mask, t, i] = 1
                 signals[sell_mask, t, i] = -1
-
+        transitions = count_position_transitions(signals)
+        print(f"Number of position transitions: {transitions}")
+        
         return signals
+
+# class MeanReversionStrategy(TradingStrategy):
+#     def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, window_size=20, threshold=0.5):
+#         """
+#         :param window_size: 롤링 윈도우 크기
+#         :param threshold: z-score 임계치 (예: 2이면 z-score가 2 이상일 때 매도, -2 이하일 때 매수)
+#         """
+#         super().__init__(initial_capital, min_trade_size, max_capital_per_asset)
+#         self.window_size = window_size
+#         self.threshold = threshold
+
+#     def get_buy_sell_signals(self, price_series: torch.Tensor):
+#         """
+#         z-score를 기반으로 매수/매도 시그널을 생성합니다.
+#         :param price_series: 텐서 형태의 가격 데이터 [N, T, d] (N: 배치 크기, T: 시간 단계, d: 자산 수)
+#         :return: 시그널 텐서 [N, T, d] (1: 매수, -1: 매도, 0: 중립)
+#         """
+#         N, T, d = price_series.shape
+#         signals = torch.zeros_like(price_series).to(price_series.device)
+
+#         for i in range(d):  # 각 자산에 대해 반복
+#             for t in range(self.window_size, T):
+#                 window = price_series[:, t - self.window_size:t, i]
+#                 rolling_mean = window.mean(dim=1)
+#                 rolling_std = window.std(dim=1)
+#                 current_price = price_series[:, t, i]
+
+#                 # 분모가 0이 되는 것을 방지하기 위해 작은 상수 추가
+#                 z_score = (current_price - rolling_mean) / (rolling_std + 1e-8)
+
+#                 # z-score에 따른 매수/매도 신호 생성
+#                 buy_mask = z_score < -self.threshold
+#                 sell_mask = z_score > self.threshold
+#                 signals[buy_mask, t, i] = 1
+#                 signals[sell_mask, t, i] = -1
+#         # 시그널 발생 여부 확인
+#         transitions = count_position_transitions(signals)
+#         print(f"Number of position transitions: {transitions}")
+        
+#         return signals
+
 
 
 class TrendFollowingStrategy(TradingStrategy):
-    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, short_window=5,
-                 long_window=12):
+    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, short_window=10,
+                 long_window=20):
         """
         :param short_window: The short window for calculating the short-term moving average.
         :param long_window: The long window for calculating the long-term moving average.
@@ -306,7 +383,7 @@ class TrendFollowingStrategy(TradingStrategy):
 
 
 class VolatilityTradingStrategy(TradingStrategy):
-    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, window_size=12,
+    def __init__(self, initial_capital=10000, min_trade_size=0.0001, max_capital_per_asset=0.2, window_size=20,
                  upper_threshold=0.4, lower_threshold=0.1):
         """
         :param window_size: The window size for calculating rolling volatility.
@@ -357,3 +434,4 @@ class VolatilityTradingStrategy(TradingStrategy):
                 signals[sell_mask, t, i] = -1  # Sell signal for low volatility
 
         return signals
+

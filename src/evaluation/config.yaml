@@ -2,7 +2,7 @@ device: cuda
 seed: 0
 
 Evaluation:
-  test_ratio: 0.5
+  test_ratio: 1.0
   n_eval: 1
   batch_size: 1800
   metrics_enabled: [
