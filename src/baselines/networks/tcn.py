@@ -7,12 +7,11 @@ class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
         super(Chomp1d, self).__init__()
         self.chomp_size = chomp_size
-
     def forward(self, x):
         return x[:, :, :-self.chomp_size].contiguous()
 
 class TemporalBlock(nn.Module):
-    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.0, spec_norm=False):
+    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout, spec_norm=False):
         super(TemporalBlock, self).__init__()
 
         # First convolutional block
@@ -24,20 +23,18 @@ class TemporalBlock(nn.Module):
         self.bn1 = nn.BatchNorm1d(n_outputs)
 
         # Second convolutional block
+        kernel_size, padding = (2, 1) if kernel_size == 1 else (kernel_size, padding)   
         conv2 = nn.Conv1d(n_outputs, n_outputs, kernel_size, stride=stride, padding=padding, dilation=dilation)
         self.conv2 = spectral_norm(conv2) if spec_norm else conv2
         self.chomp2 = None if padding == 0 else Chomp1d(padding)
         self.relu2 = nn.PReLU()
         self.dropout2 = nn.Dropout(dropout)
         self.bn2 = nn.BatchNorm1d(n_outputs)
-
+        
         # Residual connection
         self.downsample = None
         if n_inputs != n_outputs:
-            self.downsample = nn.Sequential(
-                nn.Conv1d(n_inputs, n_outputs, kernel_size=1),
-                #nn.BatchNorm1d(n_outputs)
-            )
+            self.downsample = nn.Sequential(nn.Conv1d(n_inputs, n_outputs, kernel_size=1))
         self.relu = nn.PReLU()
         self.init_weights()
 
@@ -50,7 +47,7 @@ class TemporalBlock(nn.Module):
     def forward(self, x):
         # First convolution block
         out = self.conv1(x)
-        if self.chomp1:  # Apply Chomp1d only if defined
+        if self.chomp1: 
             out = self.chomp1(out)
         out = self.bn1(out)        
         out = self.relu1(out)
@@ -58,7 +55,7 @@ class TemporalBlock(nn.Module):
 
         # Second convolution block
         out = self.conv2(out)
-        if self.chomp2:  # Apply Chomp1d only if defined
+        if self.chomp2: 
             out = self.chomp2(out)
         out = self.bn2(out)
         out = self.relu2(out)

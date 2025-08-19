@@ -5,9 +5,9 @@ n_steps: 256
 
 # Training settings
 device: cuda
-seed: 0
+seed: 1
 batch_size: 256
-n_epochs: 400
+n_epochs: 200
 
 # Algorithm-related settings
 algo: GAN
@@ -15,22 +15,22 @@ generator: TCN
 discriminator: TCN
 
 # Model settings ㅇ
-noise_dim: 2 # Noise dimension
-hidden_dim: 64
-D_hidden_dim: 64
+noise_dim: 3 # Noise dimension
+hidden_dim: 48
+D_hidden_dim: 48
 output_dim: 1
 
 # Learning rates
-lr_G: 0.0001
+lr_G: 0.0002
 lr_D: 0.0001
-D_steps_per_G_step: 1
+D_steps_per_G_step: 2
 corr_loss_type: 'l1'       # 'l2' or 'l1' or 'fro'
-lambda_gp: 20.0
+lambda_gp: 10.0
 step_size: 16
 G_dropout: 0.0
 D_dropout: 0.2
-corr_weight: 2.0
-rampup_epochs: 0
+corr_weight: 1.0
+rampup_epochs: 40
 
 # Additional settings
 gp: True
